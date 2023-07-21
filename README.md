@@ -1,1 +1,2 @@
 # ResNet18
+pytorchのResNet18を実装するためのリポジトリ
