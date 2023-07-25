@@ -6,6 +6,7 @@ from torchvision.transforms import ToTensor
 from torch.utils.data import DataLoader
 
 
+batch_size = 64
 training_data = datasets.FashionMNIST(
     root="data",
     train=True,
@@ -20,7 +21,8 @@ test_data = datasets.FashionMNIST(
     transform=ToTensor(),
 )
 
-test_dataloader = DataLoader(test_data, batch_size=64)
+train_dataloader = DataLoader(training_data, batch_size=batch_size)
+test_dataloader = DataLoader(test_data, batch_size=batch_size)
 
 device = (
     "cuda"
@@ -30,10 +32,28 @@ device = (
     else "cpu"
 )
 
+def train(dataloader, model, loss_fn, optimizer):
+    size = len(dataloader.dataset)
+    model.train()
+    for batch, (X, y) in enumerate(dataloader):
+        X, y = X.to(device), y.to(device)
+
+        # Compute prediction error
+        pred = model(X)
+        loss = loss_fn(pred, y)
+
+        # Backpropagation
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+
+        if batch % 100 == 0:
+            loss, current = loss.item(), (batch + 1) * len(X)
+            print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+
 def test(dataloader, model, loss_fn):
     size = len(dataloader.dataset)
     num_batches = len(dataloader)
-    model.cuda()
     test_loss, correct = 0, 0
     with torch.no_grad():
         for X, y in dataloader:
@@ -49,7 +69,6 @@ def test(dataloader, model, loss_fn):
 def get_resnet(num_classes: int=10) -> nn.Module:
    # ImageNetで事前学習済みの重みをロード
     model = resnet18(weights='DEFAULT')
-    model.to(device)
    # ここで更新する部分の重みは初期化される
     model.conv1 = nn.Conv2d(
         in_channels=1,
@@ -58,22 +77,23 @@ def get_resnet(num_classes: int=10) -> nn.Module:
         stride=model.conv1.stride,
         padding=model.conv1.padding,
         bias=False
-   )
-
+    )
     model.fc = nn.Linear(
         in_features=model.fc.in_features,
         out_features=num_classes
     )
-    print(type(model))
     return model
 
 
 def main():
-    model = get_resnet()
+    model = get_resnet().cuda()
     loss_fn = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters())
     epochs = 5
-    
-    test(test_dataloader, model, loss_fn)
+    for t in range(epochs):
+        print(f"Epoch {t+1}\n-------------------------------")
+        train(train_dataloader, model, loss_fn, optimizer)
+        test(test_dataloader, model, loss_fn)
     print("Done!")
 
     
